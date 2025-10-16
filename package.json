@@ -1,0 +1,22 @@
+{
+  "name": "it-automation-platform",
+  "version": "1.0.0",
+  "description": "Comprehensive IT automation and management platform",
+  "main": "backend/server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd frontend && npm start",
+    "install-all": "npm install && cd frontend && npm install && cd ../backend && npm install && cd ../ai-services && pip install -r requirements.txt",
+    "build": "cd frontend && npm run build",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "cd backend && npm test",
+    "test:frontend": "cd frontend && npm test"
+  },
+  "keywords": ["automation", "IT", "ITSM", "AI", "infrastructure"],
+  "author": "IT Automation Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

@@ -1,0 +1,158 @@
+---
+- name: VM Provisioning Automation
+  hosts: localhost
+  gather_facts: false
+  vars:
+    vcenter_hostname: "{{ vcenter_host }}"
+    vcenter_username: "{{ vcenter_user }}"
+    vcenter_password: "{{ vcenter_pass }}"
+    datacenter_name: "{{ datacenter }}"
+    cluster_name: "{{ cluster }}"
+    template_name: "{{ vm_template }}"
+    vm_folder: "{{ folder_path | default('vm') }}"
+    
+  tasks:
+    - name: Create VM from template
+      vmware_guest:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: false
+        datacenter: "{{ datacenter_name }}"
+        cluster: "{{ cluster_name }}"
+        folder: "{{ vm_folder }}"
+        name: "{{ vm_name }}"
+        state: present
+        template: "{{ template_name }}"
+        disk:
+          - size_gb: "{{ disk_size | default(50) }}"
+            type: thin
+            datastore: "{{ datastore_name }}"
+        hardware:
+          memory_mb: "{{ memory_mb | default(4096) }}"
+          num_cpus: "{{ num_cpus | default(2) }}"
+          num_cpu_cores_per_socket: "{{ cores_per_socket | default(1) }}"
+        networks:
+          - name: "{{ network_name }}"
+            ip: "{{ vm_ip | default(omit) }}"
+            netmask: "{{ vm_netmask | default(omit) }}"
+            gateway: "{{ vm_gateway | default(omit) }}"
+            dns_servers: "{{ dns_servers | default(omit) }}"
+        customization:
+          hostname: "{{ vm_name }}"
+          domain: "{{ domain_name | default('local') }}"
+          timezone: "{{ timezone | default('UTC') }}"
+        wait_for_ip_address: true
+        wait_for_ip_address_timeout: 600
+      register: vm_creation_result
+
+    - name: Configure VM post-deployment
+      block:
+        - name: Wait for VM to be accessible
+          wait_for:
+            host: "{{ vm_creation_result.instance.ipv4 }}"
+            port: 22
+            delay: 30
+            timeout: 300
+          when: vm_creation_result.instance.ipv4 is defined
+
+        - name: Add VM to inventory
+          add_host:
+            name: "{{ vm_name }}"
+            ansible_host: "{{ vm_creation_result.instance.ipv4 }}"
+            ansible_user: "{{ vm_user | default('admin') }}"
+            ansible_ssh_private_key_file: "{{ ssh_key_path | default('~/.ssh/id_rsa') }}"
+          when: vm_creation_result.instance.ipv4 is defined
+
+    - name: Install basic packages
+      package:
+        name:
+          - curl
+          - wget
+          - vim
+          - htop
+          - net-tools
+        state: present
+      delegate_to: "{{ vm_name }}"
+      when: vm_creation_result.instance.ipv4 is defined
+
+    - name: Configure security settings
+      block:
+        - name: Update system packages
+          package:
+            name: "*"
+            state: latest
+          delegate_to: "{{ vm_name }}"
+
+        - name: Configure firewall
+          firewalld:
+            service: ssh
+            permanent: true
+            state: enabled
+            immediate: true
+          delegate_to: "{{ vm_name }}"
+
+        - name: Set up monitoring agent
+          copy:
+            content: |
+              #!/bin/bash
+              # Monitoring agent installation script
+              curl -sSL https://monitoring.company.com/install.sh | bash
+            dest: /tmp/install_monitoring.sh
+            mode: '0755'
+          delegate_to: "{{ vm_name }}"
+
+        - name: Install monitoring agent
+          command: /tmp/install_monitoring.sh
+          delegate_to: "{{ vm_name }}"
+
+    - name: Register VM in CMDB
+      uri:
+        url: "{{ cmdb_api_url }}/api/assets"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ cmdb_api_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          name: "{{ vm_name }}"
+          type: "Virtual Machine"
+          ip_address: "{{ vm_creation_result.instance.ipv4 }}"
+          cpu_count: "{{ num_cpus | default(2) }}"
+          memory_gb: "{{ (memory_mb | default(4096) / 1024) | round }}"
+          disk_gb: "{{ disk_size | default(50) }}"
+          operating_system: "{{ os_type | default('Linux') }}"
+          environment: "{{ environment | default('Development') }}"
+          owner: "{{ vm_owner }}"
+          created_date: "{{ ansible_date_time.iso8601 }}"
+          status: "Active"
+        status_code: [200, 201]
+      when: vm_creation_result.instance.ipv4 is defined
+
+    - name: Send notification
+      mail:
+        to: "{{ notification_email }}"
+        subject: "VM Provisioning Complete - {{ vm_name }}"
+        body: |
+          VM provisioning has been completed successfully.
+          
+          Details:
+          - VM Name: {{ vm_name }}
+          - IP Address: {{ vm_creation_result.instance.ipv4 }}
+          - CPU: {{ num_cpus | default(2) }} cores
+          - Memory: {{ memory_mb | default(4096) }} MB
+          - Disk: {{ disk_size | default(50) }} GB
+          - Environment: {{ environment | default('Development') }}
+          
+          The VM is now ready for use.
+      when: 
+        - vm_creation_result.instance.ipv4 is defined
+        - notification_email is defined
+
+    - name: Log provisioning details
+      lineinfile:
+        path: /var/log/vm-provisioning.log
+        line: "{{ ansible_date_time.iso8601 }} - VM {{ vm_name }} provisioned successfully - IP: {{ vm_creation_result.instance.ipv4 }}"
+        create: true
+      delegate_to: localhost
+      when: vm_creation_result.instance.ipv4 is defined
