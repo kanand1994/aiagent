@@ -162,7 +162,7 @@ const Login = ({ onLogin }) => {
               </Form.Item>
             </Form>
 
-            <div style={{ marginTop: '24px' }}>
+            {/*<div style={{ marginTop: '24px' }}>
               <p style={{ textAlign: 'center', color: '#666', marginBottom: '16px' }}>
                 Quick Login (Demo):
               </p>
@@ -204,7 +204,7 @@ const Login = ({ onLogin }) => {
                   </Button>
                 </Col>
               </Row>
-            </div>
+            </div>*/}
 
             <div style={{ 
               marginTop: '24px', 
@@ -214,11 +214,11 @@ const Login = ({ onLogin }) => {
               fontSize: '12px',
               color: '#666'
             }}>
-              <strong>Demo Credentials:</strong><br/>
+              {/*<strong>Demo Credentials:</strong><br/>
               Admin: admin / admin123<br/>
               IT Tech: ittech / admin123<br/>
               Manager: manager / admin123<br/>
-              End User: user / admin123
+              End User: user / admin123*/}
             </div>
           </Card>
         </Col>
